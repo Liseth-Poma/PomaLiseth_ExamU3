@@ -1,0 +1,113 @@
+/* public/style.css - Estilos actualizados y profesionales */
+
+/* Importar una fuente moderna de Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+body {
+  font-family: 'Roboto', sans-serif;
+  background-color: #f4f7fa; /* Fondo gris claro para un look profesional */
+  color: #333; /* Texto oscuro para legibilidad */
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  text-align: center;
+}
+
+#app {
+  background-color: #ffffff; /* Fondo blanco para el contenedor principal */
+  padding: 40px;
+  border-radius: 12px; /* Bordes redondeados suaves */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); /* Sombra sutil para profundidad */
+  max-width: 500px;
+  width: 100%;
+  transition: all 0.3s ease; /* Transición suave para cambios */
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 30px;
+  color: #2c3e50; /* Azul oscuro profesional */
+}
+
+h2 {
+  font-size: 20px;
+  font-weight: 500;
+  margin-bottom: 20px;
+  color: #34495e;
+}
+
+#auth button,
+#emoji-buttons button {
+  background-color: #3498db; /* Azul principal para botones */
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  margin: 10px;
+}
+
+#auth button:hover,
+#emoji-buttons button:hover {
+  background-color: #2980b9; /* Azul más oscuro en hover */
+  transform: translateY(-2px); /* Efecto de elevación sutil */
+}
+
+#auth button:active,
+#emoji-buttons button:active {
+  transform: translateY(0); /* Regresa al presionar */
+}
+
+#emoji-buttons {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+#emoji-buttons button {
+  font-size: 24px; /* Tamaño de emoji más grande */
+  padding: 15px 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px; /* Espacio entre emoji y contador */
+}
+
+#emoji-buttons span {
+  font-size: 18px;
+  background-color: #ecf0f1; /* Fondo gris claro para contadores */
+  padding: 5px 10px;
+  border-radius: 20px; /* Contadores redondeados */
+  color: #7f8c8d;
+}
+
+/* Responsivo para dispositivos móviles */
+@media (max-width: 480px) {
+  #app {
+    padding: 20px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  #emoji-buttons button {
+    font-size: 20px;
+    padding: 10px 20px;
+  }
+}
+
+/* Animación sutil para actualización de contadores */
+#emoji-buttons span {
+  transition: color 0.3s ease;
+}
+
+#emoji-buttons button:hover span {
+  color: #ffffff; /* Cambia color del contador en hover */
+}

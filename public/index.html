@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Selector de Reacción en Vivo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <h1>Selector de Reacción en Vivo</h1>
+    <div id="auth">
+      <button onclick="login()">Iniciar Sesión con GitHub</button>
+    </div>
+    <div id="content" style="display: none;">
+      <h2>Bienvenido, <span id="username"></span></h2>
+      <div id="emoji-buttons">
+        <button onclick="react('😊')">😊 <span id="count-😊">0</span></button>
+        <button onclick="react('👍')">👍 <span id="count-👍">0</span></button>
+        <button onclick="react('❤️')">❤️ <span id="count-❤️">0</span></button>
+      </div>
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
