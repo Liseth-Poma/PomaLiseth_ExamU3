@@ -17,6 +17,9 @@ const io = new Server(server, {
   }
 });
 
+// Store para usuarios conectados (en producción usar Redis o base de datos)
+const connectedUsers = new Map();
+
 // Configuración de Express
 app.use(express.static('public'));
 app.use(express.json());
@@ -43,18 +46,32 @@ passport.use(new GitHubStrategy({
   console.log('Perfil de GitHub recibido:', {
     id: profile.id,
     username: profile.username,
+    displayName: profile.displayName,
     email: profile.emails ? profile.emails[0]?.value : 'No email'
   });
-  return done(null, profile);
+  
+  // Guardar información completa del usuario
+  const userData = {
+    id: profile.id,
+    username: profile.username || profile.displayName || `user_${profile.id}`,
+    displayName: profile.displayName,
+    email: profile.emails ? profile.emails[0]?.value : null,
+    avatar: profile.photos ? profile.photos[0]?.value : null
+  };
+  
+  return done(null, userData);
 }));
 
 passport.serializeUser((user, done) => {
   console.log('Serializando usuario:', user.id);
   done(null, user.id);
 });
+
 passport.deserializeUser((id, done) => {
   console.log('Deserializando usuario:', id);
-  done(null, { id, username: 'unknown' });
+  // En lugar de retornar datos ficticios, buscar en nuestro store o usar los datos de la sesión
+  const userData = connectedUsers.get(id) || { id, username: `user_${id}` };
+  done(null, userData);
 });
 
 // Middleware para verificar JWT
@@ -75,26 +92,17 @@ const authenticateJWT = (req, res, next) => {
   });
 };
 
-// Rutas de autenticación
+// Rutas de autenticación - SIN limpiar sesión
 app.get('/auth/github', (req, res, next) => {
-  console.log('Accediendo a /auth/github con sesión:', req.session);
-  // Limpiar sesión existente para forzar nueva autenticación
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('Error al limpiar sesión:', err);
-      return next(err);
-    }
-    res.clearCookie('connect.sid');
-    console.log('Sesión limpiada, iniciando autenticación con GitHub');
-    passport.authenticate('github', { 
-      scope: ['user:email'],
-      session: true
-    })(req, res, next);
-  });
+  console.log('Iniciando autenticación con GitHub para nueva sesión');
+  passport.authenticate('github', { 
+    scope: ['user:email'],
+    session: true
+  })(req, res, next);
 });
 
 app.get('/auth/github/callback', (req, res, next) => {
-  console.log('Accediendo a /auth/github/callback con query:', req.query);
+  console.log('Callback de GitHub recibido');
   passport.authenticate('github', { 
     failureRedirect: '/?error=auth_failed',
     failureMessage: true
@@ -105,13 +113,24 @@ app.get('/auth/github/callback', (req, res, next) => {
       console.error('Error: No se recibió el perfil del usuario');
       return res.redirect('/?error=no_user');
     }
-    console.log('Generando JWT para usuario:', req.user.id);
+    
+    console.log('Generando JWT para usuario:', req.user.id, req.user.username);
+    
+    // Guardar usuario en nuestro store
+    connectedUsers.set(req.user.id, req.user);
+    
+    // Crear JWT con información completa
     const token = jwt.sign(
-      { id: req.user.id, username: req.user.username || 'unknown' },
+      { 
+        id: req.user.id, 
+        username: req.user.username,
+        displayName: req.user.displayName
+      },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
-    console.log('JWT generado:', token);
+    
+    console.log('JWT generado exitosamente para usuario:', req.user.username);
     res.redirect(`/?token=${token}`);
   } catch (error) {
     console.error('Error en /auth/github/callback:', error);
@@ -119,15 +138,27 @@ app.get('/auth/github/callback', (req, res, next) => {
   }
 });
 
-// Ruta de logout
+// Ruta de logout - solo afecta al usuario actual
 app.get('/logout', (req, res) => {
-  console.log('Cerrando sesión para usuario:', req.user?.id);
+  const userId = req.user?.id;
+  console.log('Cerrando sesión para usuario:', userId);
+  
   req.logout((err) => {
     if (err) {
       console.error('Error al cerrar sesión:', err);
       return res.redirect('/?error=logout_failed');
     }
-    req.session.destroy(() => {
+    
+    // Remover usuario del store si existe
+    if (userId) {
+      connectedUsers.delete(userId);
+    }
+    
+    // Solo destruir la sesión actual, no todas las sesiones
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Error al destruir sesión:', err);
+      }
       res.clearCookie('connect.sid');
       res.redirect('/');
     });
@@ -136,27 +167,56 @@ app.get('/logout', (req, res) => {
 
 // Ruta protegida
 app.get('/api/profile', authenticateJWT, (req, res) => {
-  console.log('Accediendo a /api/profile para usuario:', req.user.id);
-  res.json({ id: req.user.id, username: req.user.username || 'unknown' });
+  console.log('Accediendo a perfil para usuario:', req.user.id);
+  res.json({ 
+    id: req.user.id, 
+    username: req.user.username || `user_${req.user.id}`,
+    displayName: req.user.displayName
+  });
 });
 
 // Socket.io para reacciones en tiempo real
 const emojiCounts = { '😊': 0, '👍': 0, '❤️': 0 };
+const userSockets = new Map(); // Mapear usuarios a sus sockets
 
 io.on('connection', (socket) => {
   console.log('Nuevo cliente conectado:', socket.id);
+  
+  // Enviar contadores actuales al nuevo cliente
   socket.emit('emoji:updated', emojiCounts);
+  
+  // Manejar autenticación del socket (opcional)
+  socket.on('authenticate', (token) => {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.userId = decoded.id;
+      socket.username = decoded.username;
+      userSockets.set(decoded.id, socket.id);
+      console.log(`Socket ${socket.id} autenticado para usuario: ${decoded.username}`);
+    } catch (error) {
+      console.error('Error autenticando socket:', error);
+      socket.emit('auth_error', 'Token inválido');
+    }
+  });
 
   socket.on('emoji:react', (emoji) => {
     if (emojiCounts[emoji] !== undefined) {
       emojiCounts[emoji]++;
-      console.log('Reacción recibida:', emoji, 'Nuevos contadores:', emojiCounts);
+      console.log(`Reacción ${emoji} de socket ${socket.id} (usuario: ${socket.username || 'anónimo'})`);
+      console.log('Contadores actualizados:', emojiCounts);
+      
+      // Emitir a todos los clientes conectados
       io.emit('emoji:updated', emojiCounts);
     }
   });
 
   socket.on('disconnect', () => {
-    console.log('Cliente desconectado:', socket.id);
+    console.log(`Cliente desconectado: ${socket.id} (usuario: ${socket.username || 'anónimo'})`);
+    
+    // Remover del mapa si estaba autenticado
+    if (socket.userId) {
+      userSockets.delete(socket.userId);
+    }
   });
 });
 
@@ -165,6 +225,22 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
 });
 
+// Ruta para ver usuarios conectados (debug)
+app.get('/api/debug/users', (req, res) => {
+  const users = Array.from(connectedUsers.values()).map(user => ({
+    id: user.id,
+    username: user.username
+  }));
+  res.json({ 
+    connectedUsers: users.length,
+    users: users,
+    emojiCounts: emojiCounts
+  });
+});
+
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log('Múltiples usuarios pueden conectarse simultáneamente');
+});
